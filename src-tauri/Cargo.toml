@@ -1,0 +1,18 @@
+[package]
+name = "cashflow-monitor"
+version = "0.1.0"
+description = "CashFlow Monitor"
+authors = ["you"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.6", features = ["api-all"] }
+tauri-plugin-sql = { version = "0.4", features = ["sqlite"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
