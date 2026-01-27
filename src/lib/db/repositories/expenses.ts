@@ -1,50 +1,55 @@
-import { getDb } from "@/lib/db/client";
 import type { Expense, ExpenseCategory } from "@/lib/types";
+import { getTable, setTable } from "@/lib/storage";
+import { getNextId } from "@/lib/storage/helpers";
 
 export async function listExpenseCategories() {
-  const db = await getDb();
-  return db.select<ExpenseCategory[]>("SELECT * FROM expense_categories ORDER BY name ASC;");
+  const items = await getTable<"expense_categories">("expense_categories", []);
+  return [...items].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function createExpenseCategory(name: string) {
-  const db = await getDb();
   const now = new Date().toISOString();
-  await db.execute(
-    `INSERT INTO expense_categories (name, created_at) VALUES ($1, $2);`,
-    [name, now]
-  );
+  const items = await getTable<"expense_categories">("expense_categories", []);
+  if (items.some((category) => category.name.toLowerCase() === name.toLowerCase())) {
+    return;
+  }
+  const category: ExpenseCategory = {
+    id: getNextId(items),
+    name,
+    created_at: now
+  };
+  await setTable("expense_categories", [...items, category]);
 }
 
 export async function listExpenses(month?: string) {
-  const db = await getDb();
-  if (month) {
-    return db.select<Expense[]>(
-      "SELECT * FROM expenses WHERE substr(date, 1, 7) = $1 ORDER BY date DESC;",
-      [month]
-    );
-  }
-  return db.select<Expense[]>("SELECT * FROM expenses ORDER BY date DESC;");
+  const items = await getTable<"expenses">("expenses", []);
+  const filtered = month ? items.filter((expense) => expense.date.startsWith(month)) : items;
+  return [...filtered].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export async function listExpensesByYear(year: string) {
-  const db = await getDb();
-  return db.select<Expense[]>(
-    "SELECT * FROM expenses WHERE substr(date, 1, 4) = $1 ORDER BY date ASC;",
-    [year]
-  );
+  const items = await getTable<"expenses">("expenses", []);
+  return items
+    .filter((expense) => expense.date.startsWith(year))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export async function createExpense(payload: Omit<Expense, "id" | "created_at" | "updated_at">) {
-  const db = await getDb();
   const now = new Date().toISOString();
-  await db.execute(
-    `INSERT INTO expenses (date, amount, description, category_id, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$5);`,
-    [payload.date, payload.amount, payload.description, payload.category_id, now]
-  );
+  const items = await getTable<"expenses">("expenses", []);
+  const expense: Expense = {
+    id: getNextId(items),
+    ...payload,
+    created_at: now,
+    updated_at: now
+  };
+  await setTable("expenses", [...items, expense]);
 }
 
 export async function deleteExpense(id: number) {
-  const db = await getDb();
-  await db.execute("DELETE FROM expenses WHERE id = $1;", [id]);
+  const items = await getTable<"expenses">("expenses", []);
+  await setTable(
+    "expenses",
+    items.filter((expense) => expense.id !== id)
+  );
 }

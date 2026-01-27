@@ -1,46 +1,36 @@
-import { getDb } from "@/lib/db/client";
 import type { Income } from "@/lib/types";
+import { getTable, setTable } from "@/lib/storage";
+import { getNextId } from "@/lib/storage/helpers";
 
 export async function listIncomes(month?: string) {
-  const db = await getDb();
-  if (month) {
-    return db.select<Income[]>(
-      "SELECT * FROM incomes WHERE substr(date, 1, 7) = $1 ORDER BY date DESC;",
-      [month]
-    );
-  }
-  return db.select<Income[]>("SELECT * FROM incomes ORDER BY date DESC;");
+  const items = await getTable<"incomes">("incomes", []);
+  const filtered = month ? items.filter((income) => income.date.startsWith(month)) : items;
+  return [...filtered].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export async function listIncomesByYear(year: string) {
-  const db = await getDb();
-  return db.select<Income[]>(
-    "SELECT * FROM incomes WHERE substr(date, 1, 4) = $1 ORDER BY date ASC;",
-    [year]
-  );
+  const items = await getTable<"incomes">("incomes", []);
+  return items
+    .filter((income) => income.date.startsWith(year))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export async function createIncome(payload: Omit<Income, "id" | "created_at" | "updated_at">) {
-  const db = await getDb();
   const now = new Date().toISOString();
-  await db.execute(
-    `INSERT INTO incomes (date, contractor, title, net_amount, vat_amount, gross_amount, invoice_ref, notes, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9);`,
-    [
-      payload.date,
-      payload.contractor,
-      payload.title,
-      payload.net_amount,
-      payload.vat_amount,
-      payload.gross_amount,
-      payload.invoice_ref ?? null,
-      payload.notes ?? null,
-      now
-    ]
-  );
+  const items = await getTable<"incomes">("incomes", []);
+  const income: Income = {
+    id: getNextId(items),
+    ...payload,
+    created_at: now,
+    updated_at: now
+  };
+  await setTable("incomes", [...items, income]);
 }
 
 export async function deleteIncome(id: number) {
-  const db = await getDb();
-  await db.execute("DELETE FROM incomes WHERE id = $1;", [id]);
+  const items = await getTable<"incomes">("incomes", []);
+  await setTable(
+    "incomes",
+    items.filter((income) => income.id !== id)
+  );
 }
