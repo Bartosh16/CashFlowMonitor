@@ -1,24 +1,23 @@
-import { getDb } from "@/lib/db/client";
 import type { Settings } from "@/lib/types";
+import { getTable, setTable } from "@/lib/storage";
 
 export async function getSettings(): Promise<Settings> {
-  const db = await getDb();
-  const rows = await db.select<Settings[]>("SELECT * FROM settings WHERE id = 1 LIMIT 1;");
-  return rows[0];
+  const settings = await getTable<"settings">("settings", null);
+  if (!settings) {
+    throw new Error("Brak ustawień podatkowych. Uruchom onboarding ponownie.");
+  }
+  return settings;
 }
 
 export async function updateSettings(values: Partial<Settings>) {
-  const db = await getDb();
+  const settings = await getTable<"settings">("settings", null);
+  if (!settings) {
+    throw new Error("Nie znaleziono ustawień podatkowych.");
+  }
   const now = new Date().toISOString();
-  const fields = Object.keys(values);
-  if (fields.length === 0) return;
-
-  const setters = fields.map((field, index) => `${field} = $${index + 1}`);
-  const params = fields.map((field) => (values as Record<string, unknown>)[field]);
-  params.push(now);
-
-  await db.execute(
-    `UPDATE settings SET ${setters.join(", ")}, updated_at = $${params.length} WHERE id = 1;`,
-    params
-  );
+  await setTable("settings", {
+    ...settings,
+    ...values,
+    updated_at: now
+  });
 }

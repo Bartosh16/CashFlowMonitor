@@ -1,31 +1,45 @@
-import { getDb } from "@/lib/db/client";
 import type { BankAccount } from "@/lib/types";
+import { getTable, setTable } from "@/lib/storage";
+import { getNextId } from "@/lib/storage/helpers";
 
 export async function listBankAccounts() {
-  const db = await getDb();
-  return db.select<BankAccount[]>("SELECT * FROM bank_accounts ORDER BY created_at DESC;");
+  const items = await getTable<"bank_accounts">("bank_accounts", []);
+  return [...items].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
 }
 
 export async function createBankAccount(payload: Omit<BankAccount, "id" | "created_at" | "updated_at">) {
-  const db = await getDb();
   const now = new Date().toISOString();
-  await db.execute(
-    `INSERT INTO bank_accounts (name, balance, created_at, updated_at)
-     VALUES ($1,$2,$3,$3);`,
-    [payload.name, payload.balance, now]
-  );
+  const items = await getTable<"bank_accounts">("bank_accounts", []);
+  const account: BankAccount = {
+    id: getNextId(items),
+    ...payload,
+    created_at: now,
+    updated_at: now
+  };
+  await setTable("bank_accounts", [...items, account]);
 }
 
 export async function updateBankAccountBalance(id: number, balance: number) {
-  const db = await getDb();
   const now = new Date().toISOString();
-  await db.execute(
-    `UPDATE bank_accounts SET balance = $1, updated_at = $2 WHERE id = $3;`,
-    [balance, now, id]
+  const items = await getTable<"bank_accounts">("bank_accounts", []);
+  await setTable(
+    "bank_accounts",
+    items.map((account) =>
+      account.id === id
+        ? {
+            ...account,
+            balance,
+            updated_at: now
+          }
+        : account
+    )
   );
 }
 
 export async function deleteBankAccount(id: number) {
-  const db = await getDb();
-  await db.execute("DELETE FROM bank_accounts WHERE id = $1;", [id]);
+  const items = await getTable<"bank_accounts">("bank_accounts", []);
+  await setTable(
+    "bank_accounts",
+    items.filter((account) => account.id !== id)
+  );
 }

@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSettings, useUpdateSettings } from "@/lib/hooks/useSettings";
 import { useEntitlements, useUpdatePlan } from "@/lib/hooks/useEntitlements";
 import type { Plan } from "@/lib/types";
+import { exportData, importData } from "@/lib/storage";
 
 const settingsSchema = z.object({
   tax_system: z.enum(["SCALE", "LINEAR", "LUMP_SUM"]),
@@ -24,6 +26,8 @@ export default function SettingsPage() {
   const { data: entitlements } = useEntitlements();
   const updateSettings = useUpdateSettings();
   const updatePlan = useUpdatePlan();
+  const [importing, setImporting] = useState(false);
+  const queryClient = useQueryClient();
 
   const [form, setForm] = useState({
     tax_system: "SCALE",
@@ -83,6 +87,46 @@ export default function SettingsPage() {
   const handlePlan = async () => {
     await updatePlan.mutateAsync(plan);
     toast.success("Zaktualizowano plan.");
+  };
+
+  const handleExport = async () => {
+    try {
+      const data = await exportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "cashflow-monitor-export.json";
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success("Wyeksportowano dane.");
+    } catch (error) {
+      toast.error("Nie udało się wyeksportować danych.", {
+        description: error instanceof Error ? error.message : "Nieznany błąd."
+      });
+    }
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as Record<string, unknown>;
+      await importData(payload);
+      await queryClient.invalidateQueries();
+      toast.success("Zaimportowano dane.");
+    } catch (error) {
+      toast.error("Nie udało się zaimportować danych.", {
+        description: error instanceof Error ? error.message : "Nieznany błąd."
+      });
+    } finally {
+      setImporting(false);
+      event.target.value = "";
+    }
   };
 
   return (
@@ -185,6 +229,30 @@ export default function SettingsPage() {
           <button type="button" onClick={handlePlan}>
             Zapisz plan
           </button>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold">Eksport / Import</h2>
+        <p className="text-sm text-slate-500">
+          Zachowaj kopię danych lub przenieś je do innej instancji aplikacji.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={handleExport}>
+            Eksportuj JSON
+          </button>
+          <label className="flex items-center gap-3 text-sm">
+            <span className="rounded-md border border-slate-200 px-3 py-2 text-slate-700">
+              {importing ? "Importuję..." : "Importuj JSON"}
+            </span>
+            <input
+              className="hidden"
+              type="file"
+              accept="application/json"
+              onChange={handleImport}
+              disabled={importing}
+            />
+          </label>
         </div>
       </section>
     </div>

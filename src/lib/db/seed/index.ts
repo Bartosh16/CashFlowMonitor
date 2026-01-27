@@ -1,18 +1,39 @@
-import { getDb } from "@/lib/db/client";
+import { getTable, setTable } from "@/lib/storage";
+import type { ExpenseCategory, Settings, Entitlements } from "@/lib/types";
 
 export async function seedDatabase() {
-  const db = await getDb();
   const now = new Date().toISOString();
 
-  await db.execute(
-    `INSERT OR IGNORE INTO settings (id, created_at, updated_at) VALUES (1, $1, $1);`,
-    [now]
-  );
-  await db.execute(
-    `INSERT OR IGNORE INTO entitlements (id, plan, ads_enabled, company_mode_enabled, updated_at)
-     VALUES (1, 'FREE', 1, 0, $1);`,
-    [now]
-  );
+  const settings = await getTable<"settings">("settings", null);
+  if (!settings) {
+    const defaultSettings: Settings = {
+      id: 1,
+      tax_system: "SCALE",
+      is_vat_payer: 1,
+      tax_threshold: 120000,
+      tax_rate_1: 12,
+      tax_rate_2: 32,
+      health_rate: 9,
+      tax_free_deduction: 3600,
+      zus_fixed: 1927,
+      profit_first_rate: 9,
+      created_at: now,
+      updated_at: now
+    };
+    await setTable("settings", defaultSettings);
+  }
+
+  const entitlements = await getTable<"entitlements">("entitlements", null);
+  if (!entitlements) {
+    const defaultEntitlements: Entitlements = {
+      id: 1,
+      plan: "FREE",
+      ads_enabled: 1,
+      company_mode_enabled: 0,
+      updated_at: now
+    };
+    await setTable("entitlements", defaultEntitlements);
+  }
 
   const categories = [
     "Biuro i narzędzia",
@@ -22,10 +43,13 @@ export async function seedDatabase() {
     "Transport"
   ];
 
-  for (const name of categories) {
-    await db.execute(
-      `INSERT OR IGNORE INTO expense_categories (name, created_at) VALUES ($1, $2);`,
-      [name, now]
-    );
+  const existingCategories = await getTable<"expense_categories">("expense_categories", []);
+  if (existingCategories.length === 0) {
+    const seeded: ExpenseCategory[] = categories.map((name, index) => ({
+      id: index + 1,
+      name,
+      created_at: now
+    }));
+    await setTable("expense_categories", seeded);
   }
 }
